@@ -8,6 +8,30 @@ function formatTime(totalSeconds) {
   return `${m}:${String(s).padStart(2, '0')}`;
 }
 
+/** 3 bips synthétisés (Web Audio API, pas de fichier son à charger). Best-effort. */
+function playEndBeeps() {
+  try {
+    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+    const audioCtx = new AudioContextClass();
+    const now = audioCtx.currentTime;
+    [0, 0.35, 0.7].forEach((offset) => {
+      const oscillator = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      oscillator.type = 'sine';
+      oscillator.frequency.value = 880;
+      gain.gain.setValueAtTime(0.001, now + offset);
+      gain.gain.exponentialRampToValueAtTime(0.3, now + offset + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + offset + 0.2);
+      oscillator.connect(gain);
+      gain.connect(audioCtx.destination);
+      oscillator.start(now + offset);
+      oscillator.stop(now + offset + 0.2);
+    });
+  } catch {
+    // Son optionnel : on ignore silencieusement si l'audio n'est pas disponible.
+  }
+}
+
 // Classes Tailwind statiques (le JIT ne détecte pas les noms construits dynamiquement).
 const ACCENTS = {
   pink: {
@@ -83,11 +107,12 @@ export default function TimerRunner({ childId, type, label, emoji, accent = 'pin
   useEffect(() => {
     if (running && !paused && remaining === 0 && sessionId) {
       setRunning(false);
+      if (phases) playEndBeeps();
       completeSession(childId, sessionId)
         .then(() => onDone?.())
         .catch((err) => setError(err.message));
     }
-  }, [remaining, running, paused, sessionId, childId, onDone]);
+  }, [remaining, running, paused, sessionId, childId, onDone, phases]);
 
   // Saute directement à la fin de la phase en cours (ex. mouillage -> savonnage).
   function handleSkipPhase(e) {
