@@ -1,0 +1,9 @@
+{
+  "appId": "com.childapp.app",
+  "appName": "Child App",
+  "webDir": "dist",
+  "server": {
+    "url": "https://childapp.alwaysdata.net",
+    "androidScheme": "https"
+  }
+}
