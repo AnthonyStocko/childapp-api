@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Pencil, History, Music, Droplet, SoapDispenserDroplet, ShowerHead } from 'lucide-react';
@@ -7,12 +7,16 @@ import { getSpotifyAccessToken, getSpotifyStatus } from '../api/me.js';
 import {
   findPlaylistByName,
   getCurrentlyPlaying,
+  getPlaybackState,
   listDevices,
   pausePlayback,
   resumePlayback,
   startPlaybackOnDevice
 } from '../api/spotifyWeb.js';
 import TimerRunner from '../components/TimerRunner.jsx';
+import useWakeLock from '../hooks/useWakeLock.js';
+
+const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 export default function ChildDetailPage() {
   const { id } = useParams();
@@ -22,8 +26,17 @@ export default function ChildDetailPage() {
   const child = children?.find((c) => String(c.id) === id);
 
   // Programme la pause Spotify pile à la fin du morceau en cours (voir stopSpotifyAtSongEnd).
+  // L'écran reste allumé jusqu'à cette pause, sinon le téléphone gèle la page
+  // et la musique ne s'arrêterait jamais.
   const songEndTimeoutRef = useRef(null);
+  const [waitingSongEnd, setWaitingSongEnd] = useState(false);
   useEffect(() => () => clearTimeout(songEndTimeoutRef.current), []);
+  useWakeLock(waitingSongEnd);
+
+  function cancelSongEndStop() {
+    clearTimeout(songEndTimeoutRef.current);
+    setWaitingSongEnd(false);
+  }
 
   function refreshHistory() {
     queryClient.invalidateQueries({ queryKey: ['stats', id] });
@@ -38,7 +51,7 @@ export default function ChildDetailPage() {
   // de connexion Spotify ne doit jamais bloquer le minuteur.
   async function playChildPlaylist() {
     if (!child.playlistName) return;
-    clearTimeout(songEndTimeoutRef.current);
+    cancelSongEndStop();
     try {
       const status = await getSpotifyStatus();
       if (!status.connected) return;
@@ -64,7 +77,7 @@ export default function ChildDetailPage() {
 
   // Met Spotify en pause (bouton pause ou annuler du minuteur). Best-effort.
   async function pauseChildPlaylist() {
-    clearTimeout(songEndTimeoutRef.current);
+    cancelSongEndStop();
     try {
       const status = await getSpotifyStatus();
       if (!status.connected) return;
@@ -88,25 +101,29 @@ export default function ChildDetailPage() {
   }
 
   // Coupe Spotify le temps des bips de la douche, uniquement s'il joue.
-  // Renvoie le jeton si on a mis en pause (pour reprendre ensuite), sinon null.
+  // Renvoie { token, deviceId } si on a mis en pause (pour reprendre ensuite), sinon null.
   async function pauseSpotifyForBeeps() {
     try {
       const status = await getSpotifyStatus();
       if (!status.connected) return null;
       const { token } = await getSpotifyAccessToken();
-      const playing = await getCurrentlyPlaying(token);
-      if (!playing?.is_playing) return null;
-      return (await pausePlayback(token)) ? token : null;
+      const state = await getPlaybackState(token);
+      if (!state?.is_playing) return null;
+      return (await pausePlayback(token)) ? { token, deviceId: state.device?.id } : null;
     } catch {
       return null;
     }
   }
 
   // Relance Spotify après les bips, seulement si c'est nous qui l'avions coupé.
-  async function resumeSpotifyAfterBeeps(token) {
-    if (!token) return;
+  // Vise l'appareil qui jouait, avec un second essai (Spotify refuse parfois
+  // une reprise juste après la pause).
+  async function resumeSpotifyAfterBeeps(paused) {
+    if (!paused) return;
     try {
-      await resumePlayback(token);
+      if (await resumePlayback(paused.token, paused.deviceId)) return;
+      await wait(700);
+      await resumePlayback(paused.token, paused.deviceId);
     } catch {
       // Musique optionnelle : on ignore silencieusement.
     }
@@ -119,11 +136,19 @@ export default function ChildDetailPage() {
       const status = await getSpotifyStatus();
       if (!status.connected) return;
       const { token } = await getSpotifyAccessToken();
-      const playing = await getCurrentlyPlaying(token);
+      // Juste après la reprise des bips de fin, Spotify peut encore se dire en
+      // pause : on redemande quelques fois avant de conclure que rien ne joue.
+      let playing = await getCurrentlyPlaying(token);
+      for (let attempt = 0; attempt < 3 && !playing?.is_playing; attempt += 1) {
+        await wait(1000);
+        playing = await getCurrentlyPlaying(token);
+      }
       if (!playing?.is_playing || !playing.item) return;
       const remainingMs = Math.max(playing.item.duration_ms - playing.progress_ms, 0);
       clearTimeout(songEndTimeoutRef.current);
+      setWaitingSongEnd(true);
       songEndTimeoutRef.current = setTimeout(() => {
+        setWaitingSongEnd(false);
         pausePlayback(token).catch(() => {});
       }, remainingMs);
     } catch {

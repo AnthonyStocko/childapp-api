@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Pause, Play, X, RotateCcw, CheckCircle2, SkipForward } from 'lucide-react';
 import { completeSession, startSession } from '../api/children.js';
+import useWakeLock from '../hooks/useWakeLock.js';
 
 function formatTime(totalSeconds) {
   const m = Math.floor(totalSeconds / 60);
@@ -83,6 +84,9 @@ export default function TimerRunner({ childId, type, label, emoji, accent = 'pin
   const intervalRef = useRef(null);
 
   useEffect(() => () => clearInterval(intervalRef.current), []);
+
+  // Écran allumé du démarrage à la fin du chrono (pause comprise).
+  useWakeLock(running);
 
   // Ne rejette jamais : la musique autour des bips est optionnelle.
   async function beepWithMusicPaused() {

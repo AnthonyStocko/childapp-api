@@ -63,13 +63,29 @@ export async function pausePlayback(accessToken) {
   return response.status === 204;
 }
 
-/** Reprend la lecture là où elle a été mise en pause (pas de contexte = pas de redémarrage de playlist). */
-export async function resumePlayback(accessToken) {
-  const response = await fetch(`${API_BASE}/me/player/play`, {
+/**
+ * Reprend la lecture là où elle a été mise en pause (pas de contexte = pas de
+ * redémarrage de playlist). `deviceId` (optionnel) vise l'appareil qui jouait,
+ * utile si Spotify ne le considère plus comme actif après la pause.
+ */
+export async function resumePlayback(accessToken, deviceId) {
+  const url = deviceId
+    ? `${API_BASE}/me/player/play?device_id=${encodeURIComponent(deviceId)}`
+    : `${API_BASE}/me/player/play`;
+  const response = await fetch(url, {
     method: 'PUT',
     headers: { Authorization: `Bearer ${accessToken}` }
   });
   return response.status === 204;
+}
+
+/** État du lecteur (appareil, lecture en cours, morceau, progression). Renvoie null si aucun lecteur. */
+export async function getPlaybackState(accessToken) {
+  const response = await fetch(`${API_BASE}/me/player`, {
+    headers: { Authorization: `Bearer ${accessToken}` }
+  });
+  if (response.status !== 200) return null;
+  return response.json();
 }
 
 /** Morceau en cours de lecture (titre, progression). Renvoie null si rien ne joue. */
