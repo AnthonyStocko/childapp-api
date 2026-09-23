@@ -10,6 +10,11 @@ export default defineConfig({
     VitePWA({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.svg'],
+      workbox: {
+        // Les navigations vers /api (ex. retour OAuth /api/spotify/callback)
+        // doivent atteindre le serveur, pas l'index.html mis en cache.
+        navigateFallbackDenylist: [/^\/api\//]
+      },
       manifest: {
         name: 'Child App',
         short_name: 'Child App',
