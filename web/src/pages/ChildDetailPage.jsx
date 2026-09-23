@@ -101,7 +101,9 @@ export default function ChildDetailPage() {
   }
 
   // Coupe Spotify le temps des bips de la douche, uniquement s'il joue.
-  // Renvoie { token, deviceId } si on a mis en pause (pour reprendre ensuite), sinon null.
+  // Renvoie { token, deviceId } si la musique jouait (pour la reprendre ensuite), sinon null.
+  // On reprend même si la réponse à la pause paraît en échec : au pire la
+  // musique jouait toujours et la reprise ne change rien.
   async function pauseSpotifyForBeeps() {
     try {
       const status = await getSpotifyStatus();
@@ -109,7 +111,8 @@ export default function ChildDetailPage() {
       const { token } = await getSpotifyAccessToken();
       const state = await getPlaybackState(token);
       if (!state?.is_playing) return null;
-      return (await pausePlayback(token)) ? { token, deviceId: state.device?.id } : null;
+      await pausePlayback(token);
+      return { token, deviceId: state.device?.id };
     } catch {
       return null;
     }

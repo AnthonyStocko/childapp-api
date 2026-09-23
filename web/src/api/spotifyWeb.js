@@ -51,7 +51,7 @@ export async function startPlaybackOnDevice(accessToken, { contextUri, deviceId 
     },
     body: JSON.stringify({ context_uri: contextUri })
   });
-  return response.status === 204;
+  return response.ok; // 204 en principe, mais Spotify répond parfois 200
 }
 
 /** Met la lecture en pause (best-effort : si rien ne joue déjà, Spotify renvoie 403, sans conséquence). */
@@ -60,7 +60,7 @@ export async function pausePlayback(accessToken) {
     method: 'PUT',
     headers: { Authorization: `Bearer ${accessToken}` }
   });
-  return response.status === 204;
+  return response.ok; // 204 en principe, mais Spotify répond parfois 200
 }
 
 /**
@@ -76,7 +76,7 @@ export async function resumePlayback(accessToken, deviceId) {
     method: 'PUT',
     headers: { Authorization: `Bearer ${accessToken}` }
   });
-  return response.status === 204;
+  return response.ok; // 204 en principe, mais Spotify répond parfois 200
 }
 
 /** État du lecteur (appareil, lecture en cours, morceau, progression). Renvoie null si aucun lecteur. */
