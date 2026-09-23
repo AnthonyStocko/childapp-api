@@ -65,4 +65,26 @@ router.post('/login', async (req, res, next) => {
   }
 });
 
+// Suppression définitive du compte parent (exigée par Google Play). Publique
+// mais protégée par email + mot de passe, pour servir aussi à la page web
+// /suppression-compte. Enfants, historique et jetons Spotify partent en cascade.
+router.post('/delete-account', async (req, res, next) => {
+  try {
+    const email = String(req.body.email ?? '').trim().toLowerCase();
+    const password = String(req.body.password ?? '');
+
+    const [user] = await db.rows('SELECT id, password_hash FROM users WHERE email = ?', [email]);
+    const ok = await bcrypt.compare(password, user ? user.password_hash : DUMMY_HASH);
+    // 403 et non 401 : côté client, un 401 déconnecte le parent (voir web/src/api/client.js).
+    if (!user || !ok) {
+      return fail(res, 403, 'invalid_credentials', 'Email ou mot de passe incorrect.');
+    }
+
+    await db.run('DELETE FROM users WHERE id = ?', [user.id]);
+    res.status(204).end();
+  } catch (e) {
+    next(e);
+  }
+});
+
 module.exports = router;

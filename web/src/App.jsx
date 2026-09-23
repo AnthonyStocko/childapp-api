@@ -9,6 +9,7 @@ import ChildDetailPage from './pages/ChildDetailPage.jsx';
 import ChildHistoryPage from './pages/ChildHistoryPage.jsx';
 import SettingsPage from './pages/SettingsPage.jsx';
 import SpotifyCallbackPage from './pages/SpotifyCallbackPage.jsx';
+import DeleteAccountPage from './pages/DeleteAccountPage.jsx';
 
 export default function App() {
   return (
@@ -16,6 +17,7 @@ export default function App() {
       <Route path="/login" element={<LoginPage />} />
       <Route path="/register" element={<RegisterPage />} />
       <Route path="/spotify-callback" element={<SpotifyCallbackPage />} />
+      <Route path="/suppression-compte" element={<DeleteAccountPage />} />
 
       <Route element={<ProtectedRoute />}>
         <Route element={<Layout />}>

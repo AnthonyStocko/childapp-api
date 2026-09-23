@@ -1,11 +1,13 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
-import { SlidersHorizontal, UserRound, Music, CheckCircle2, CircleOff, Link2, Unlink } from 'lucide-react';
+import { SlidersHorizontal, UserRound, Music, CheckCircle2, CircleOff, Link2, Unlink, Trash2 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext.jsx';
 import { disconnectSpotify, getSpotifyAuthorizeUrl, getSpotifyStatus } from '../api/me.js';
+import DeleteAccountForm from '../components/DeleteAccountForm.jsx';
 
 export default function SettingsPage() {
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
+  const [showDelete, setShowDelete] = useState(false);
   const queryClient = useQueryClient();
   const [error, setError] = useState(null);
   const [pending, setPending] = useState(false);
@@ -76,6 +78,28 @@ export default function SettingsPage() {
           {spotify?.connected ? <Unlink size={16} /> : <Link2 size={16} />}
           {spotify?.connected ? 'Déconnecter Spotify' : 'Connecter Spotify'}
         </button>
+      </div>
+
+      <div className="bg-white rounded-xl shadow p-4 space-y-3">
+        <p className="font-semibold flex items-center gap-2">
+          <Trash2 size={18} className="text-red-600" />
+          Supprimer mon compte
+        </p>
+        <p className="text-sm text-slate-600">
+          Supprime définitivement le compte, les enfants, leur historique et la connexion Spotify.
+        </p>
+        {showDelete ? (
+          // Compte supprimé : on déconnecte, ProtectedRoute renvoie vers la connexion.
+          <DeleteAccountForm email={user?.email} onDeleted={logout} />
+        ) : (
+          <button
+            type="button"
+            onClick={() => setShowDelete(true)}
+            className="rounded-md px-4 py-2 text-sm font-medium text-red-600 border border-red-200 hover:bg-red-50 transition-colors"
+          >
+            Supprimer mon compte…
+          </button>
+        )}
       </div>
     </div>
   );
