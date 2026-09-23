@@ -8,24 +8,37 @@ function formatTime(totalSeconds) {
   return `${m}:${String(s).padStart(2, '0')}`;
 }
 
-/** 3 bips synthétisés (Web Audio API, pas de fichier son à charger). Best-effort. */
-function playEndBeeps() {
-  try {
+// AudioContext partagé, créé/débloqué au tap de démarrage (les navigateurs,
+// iOS surtout, bloquent l'audio lancé hors geste utilisateur).
+let sharedAudioCtx = null;
+function getAudioContext() {
+  if (!sharedAudioCtx) {
     const AudioContextClass = window.AudioContext || window.webkitAudioContext;
-    const audioCtx = new AudioContextClass();
+    sharedAudioCtx = new AudioContextClass();
+  }
+  if (sharedAudioCtx.state === 'suspended') sharedAudioCtx.resume();
+  return sharedAudioCtx;
+}
+
+/** 3 bips forts synthétisés (Web Audio API, pas de fichier son à charger). Best-effort. */
+function playBeeps() {
+  try {
+    const audioCtx = getAudioContext();
     const now = audioCtx.currentTime;
-    [0, 0.35, 0.7].forEach((offset) => {
+    [0, 0.4, 0.8].forEach((offset) => {
       const oscillator = audioCtx.createOscillator();
       const gain = audioCtx.createGain();
-      oscillator.type = 'sine';
-      oscillator.frequency.value = 880;
+      // Onde carrée : bien plus perçante qu'une sinusoïde à volume égal (audible sous la douche).
+      oscillator.type = 'square';
+      oscillator.frequency.value = 1000;
       gain.gain.setValueAtTime(0.001, now + offset);
-      gain.gain.exponentialRampToValueAtTime(0.3, now + offset + 0.02);
-      gain.gain.exponentialRampToValueAtTime(0.001, now + offset + 0.2);
+      gain.gain.exponentialRampToValueAtTime(0.8, now + offset + 0.01);
+      gain.gain.setValueAtTime(0.8, now + offset + 0.22);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + offset + 0.28);
       oscillator.connect(gain);
       gain.connect(audioCtx.destination);
       oscillator.start(now + offset);
-      oscillator.stop(now + offset + 0.2);
+      oscillator.stop(now + offset + 0.28);
     });
   } catch {
     // Son optionnel : on ignore silencieusement si l'audio n'est pas disponible.
@@ -77,6 +90,13 @@ export default function TimerRunner({ childId, type, label, emoji, accent = 'pin
 
   async function handleStart() {
     setError(null);
+    if (phases) {
+      try {
+        getAudioContext();
+      } catch {
+        // Pas d'audio disponible : les bips seront simplement ignorés.
+      }
+    }
     try {
       const { id } = await startSession(childId, type, totalSeconds);
       setSessionId(id);
@@ -107,12 +127,22 @@ export default function TimerRunner({ childId, type, label, emoji, accent = 'pin
   useEffect(() => {
     if (running && !paused && remaining === 0 && sessionId) {
       setRunning(false);
-      if (phases) playEndBeeps();
+      if (phases) playBeeps();
       completeSession(childId, sessionId)
         .then(() => onDone?.())
         .catch((err) => setError(err.message));
     }
   }, [remaining, running, paused, sessionId, childId, onDone, phases]);
+
+  // Bips à chaque changement d'étape (mouillage -> savonnage -> rinçage).
+  // La fin de la dernière étape est couverte par l'effet ci-dessus.
+  const phaseIndex = phases ? phases.findIndex((p) => totalSeconds - remaining < p.upTo) : -1;
+  const prevPhaseIndexRef = useRef(phaseIndex);
+  useEffect(() => {
+    const prev = prevPhaseIndexRef.current;
+    prevPhaseIndexRef.current = phaseIndex;
+    if (running && phaseIndex > prev && prev !== -1) playBeeps();
+  }, [phaseIndex, running]);
 
   // Saute directement à la fin de la phase en cours (ex. mouillage -> savonnage).
   function handleSkipPhase(e) {
