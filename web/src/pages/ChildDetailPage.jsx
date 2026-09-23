@@ -106,7 +106,7 @@ export default function ChildDetailPage() {
     }
   }
 
-  function handleBrushingDone() {
+  function handleTimerDone() {
     refreshHistory();
     stopSpotifyAtSongEnd();
   }
@@ -160,7 +160,7 @@ export default function ChildDetailPage() {
           onStart={playChildPlaylist}
           onPause={pauseChildPlaylist}
           onResume={resumeChildPlaylist}
-          onDone={handleBrushingDone}
+          onDone={handleTimerDone}
         />
 
         <TimerRunner
@@ -171,7 +171,10 @@ export default function ChildDetailPage() {
           accent="teal"
           totalSeconds={showerTotal}
           phases={showerPhases}
-          onDone={refreshHistory}
+          onStart={playChildPlaylist}
+          onPause={pauseChildPlaylist}
+          onResume={resumeChildPlaylist}
+          onDone={handleTimerDone}
         />
       </div>
 
