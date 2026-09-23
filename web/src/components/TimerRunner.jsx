@@ -20,7 +20,12 @@ function getAudioContext() {
   return sharedAudioCtx;
 }
 
-/** 3 bips forts synthétisés (Web Audio API, pas de fichier son à charger). Best-effort. */
+const BEEPS_DURATION_MS = 1100;
+
+/**
+ * 3 bips forts synthétisés (Web Audio API, pas de fichier son à charger). Best-effort.
+ * La promesse se résout quand les bips sont finis.
+ */
 function playBeeps() {
   try {
     const audioCtx = getAudioContext();
@@ -43,6 +48,7 @@ function playBeeps() {
   } catch {
     // Son optionnel : on ignore silencieusement si l'audio n'est pas disponible.
   }
+  return new Promise((resolve) => setTimeout(resolve, BEEPS_DURATION_MS));
 }
 
 // Classes Tailwind statiques (le JIT ne détecte pas les noms construits dynamiquement).
@@ -64,9 +70,11 @@ const ACCENTS = {
  * API (et appelle `onStart`, ex. pour lancer Spotify), décompte localement
  * avec pause/reprise, puis marque la session terminée à 0. `phases`
  * (optionnel, pour la douche) découpe le total en étapes affichées
- * successivement pendant le décompte.
+ * successivement pendant le décompte, avec des bips à chaque changement
+ * d'étape. `onBeepStart` est attendu avant les bips (ex. couper la musique)
+ * et sa valeur de retour est passée à `onBeepEnd` une fois les bips finis.
  */
-export default function TimerRunner({ childId, type, label, emoji, accent = 'pink', totalSeconds, phases, onStart, onPause, onResume, onDone }) {
+export default function TimerRunner({ childId, type, label, emoji, accent = 'pink', totalSeconds, phases, onStart, onPause, onResume, onBeepStart, onBeepEnd, onDone }) {
   const [sessionId, setSessionId] = useState(null);
   const [remaining, setRemaining] = useState(totalSeconds);
   const [running, setRunning] = useState(false);
@@ -75,6 +83,22 @@ export default function TimerRunner({ childId, type, label, emoji, accent = 'pin
   const intervalRef = useRef(null);
 
   useEffect(() => () => clearInterval(intervalRef.current), []);
+
+  // Ne rejette jamais : la musique autour des bips est optionnelle.
+  async function beepWithMusicPaused() {
+    let beepContext;
+    try {
+      beepContext = await onBeepStart?.();
+    } catch {
+      // On bipe quand même.
+    }
+    await playBeeps();
+    try {
+      await onBeepEnd?.(beepContext);
+    } catch {
+      // Ignoré.
+    }
+  }
 
   function tick() {
     intervalRef.current = setInterval(() => {
@@ -127,8 +151,10 @@ export default function TimerRunner({ childId, type, label, emoji, accent = 'pin
   useEffect(() => {
     if (running && !paused && remaining === 0 && sessionId) {
       setRunning(false);
-      if (phases) playBeeps();
-      completeSession(childId, sessionId)
+      // onDone attend la fin des bips (et la reprise de la musique) pour que
+      // l'arrêt Spotify en fin de morceau se base sur une lecture en cours.
+      const beeps = phases ? beepWithMusicPaused() : Promise.resolve();
+      Promise.all([completeSession(childId, sessionId), beeps])
         .then(() => onDone?.())
         .catch((err) => setError(err.message));
     }
@@ -141,7 +167,7 @@ export default function TimerRunner({ childId, type, label, emoji, accent = 'pin
   useEffect(() => {
     const prev = prevPhaseIndexRef.current;
     prevPhaseIndexRef.current = phaseIndex;
-    if (running && phaseIndex > prev && prev !== -1) playBeeps();
+    if (running && phaseIndex > prev && prev !== -1) beepWithMusicPaused();
   }, [phaseIndex, running]);
 
   // Saute directement à la fin de la phase en cours (ex. mouillage -> savonnage).

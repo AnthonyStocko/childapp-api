@@ -87,6 +87,31 @@ export default function ChildDetailPage() {
     }
   }
 
+  // Coupe Spotify le temps des bips de la douche, uniquement s'il joue.
+  // Renvoie le jeton si on a mis en pause (pour reprendre ensuite), sinon null.
+  async function pauseSpotifyForBeeps() {
+    try {
+      const status = await getSpotifyStatus();
+      if (!status.connected) return null;
+      const { token } = await getSpotifyAccessToken();
+      const playing = await getCurrentlyPlaying(token);
+      if (!playing?.is_playing) return null;
+      return (await pausePlayback(token)) ? token : null;
+    } catch {
+      return null;
+    }
+  }
+
+  // Relance Spotify après les bips, seulement si c'est nous qui l'avions coupé.
+  async function resumeSpotifyAfterBeeps(token) {
+    if (!token) return;
+    try {
+      await resumePlayback(token);
+    } catch {
+      // Musique optionnelle : on ignore silencieusement.
+    }
+  }
+
   // Fin du minuteur : on laisse le morceau en cours se terminer, puis on coupe
   // la lecture (pas d'enchaînement sur le morceau suivant de la playlist).
   async function stopSpotifyAtSongEnd() {
@@ -174,6 +199,8 @@ export default function ChildDetailPage() {
           onStart={playChildPlaylist}
           onPause={pauseChildPlaylist}
           onResume={resumeChildPlaylist}
+          onBeepStart={pauseSpotifyForBeeps}
+          onBeepEnd={resumeSpotifyAfterBeeps}
           onDone={handleTimerDone}
         />
       </div>
